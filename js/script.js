@@ -99,222 +99,189 @@ function isNegated(text, words) {
 // 34 ML FEATURE EXTRACTION
 // ============================================================
 
-function extractMLFeatures(
-    emergencyType,
-    symptoms,
-    age
-) {
+// ============================================================
+// SMARTEMS CONFIGURATION
+// ============================================================
 
-    const type =
-        normalizeText(emergencyType);
+const API_BASE = "https://meddispatch-backend.onrender.com";
 
-    const symptomText =
-        normalizeText(symptoms);
+const JSON_HEADERS = {
+    "Content-Type": "application/json"
+};
 
-    const text =
-        `${type} ${symptomText}`;
+// ============================================================
+// TEXT HELPERS
+// ============================================================
 
+function normalizeText(text) {
+    return String(text || "")
+        .toLowerCase()
+        .replace(/[.,!?;:()[\]\\{}]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function containsAny(text, phrases) {
+    return phrases.some(function (phrase) {
+        return text.includes(phrase);
+    });
+}
+
+// Check for a negation near the matching symptom instead of
+// treating every negation anywhere in the sentence as relevant.
+function isNegated(text, words) {
+    const negations = [
+        "no",
+        "not",
+        "without",
+        "never",
+        "don't",
+        "doesn't",
+        "didn't",
+        "isn't",
+        "wasn't",
+        "aren't",
+        "cannot",
+        "can't"
+    ];
+
+    for (const word of words) {
+        let startIndex = 0;
+
+        while (true) {
+            const index = text.indexOf(word, startIndex);
+
+            if (index === -1) {
+                break;
+            }
+
+            const before = text.substring(
+                Math.max(0, index - 25),
+                index
+            ).trim();
+
+            const lastWords = before.split(/\s+/).slice(-4);
+            const negated = lastWords.some(function (token) {
+                return negations.includes(token);
+            });
+
+            if (negated) {
+                return true;
+            }
+
+            startIndex = index + word.length;
+        }
+    }
+
+    return false;
+}
+
+// ============================================================
+// 34 ML FEATURE EXTRACTION
+// ============================================================
+
+function extractMLFeatures(emergencyType, symptoms, age) {
+    const type = normalizeText(emergencyType);
+    const symptomText = normalizeText(symptoms);
+    const text = `${type} ${symptomText}`;
 
     console.log("========================================");
     console.log("SMARTEMS FEATURE EXTRACTION");
-    console.log("========================================");
-    console.log(
-        "Emergency Type:",
-        emergencyType
-    );
-    console.log(
-        "User Sentence:",
-        symptoms
-    );
-    console.log(
-        "Normalized:",
-        text
-    );
+    console.log("Emergency Type:", emergencyType);
+    console.log("User Sentence:", symptoms);
+    console.log("Normalized:", text);
 
-
-    // ========================================================
-    // DEFAULT 34 FEATURES
-    // ========================================================
-
+    // Defaults retained for compatibility with your existing API.
     const features = {
-
         age: Number(age) || 0,
-
-        emergency_type:
-            emergencyType || "Unknown",
-
-        incident_location:
-            "",
-
-        bleeding:
-            "No",
-
-        conscious:
-            "Yes",
-
-        breathing:
-            "Normal",
-
-        accident_level:
-            "None",
-
-        visible_fracture:
-            "No",
-
-        trapped:
-            "No",
-
-        injury_type:
-            "Unknown",
-
-        pain_level:
-            "Unknown",
-
-        chest_pain:
-            "No",
-
-        sweating:
-            "No",
-
-        shortness_of_breath:
-            "No",
-
-        face_drooping:
-            "No",
-
-        arm_weakness:
-            "No",
-
-        speech_difficulty:
-            "No",
-
-        poison_type:
-            "None",
-
-        vomiting:
-            "No",
-
-        seizures:
-            "No",
-
-        entry_exit_burn:
-            "No",
-
-        muscle_spasm:
-            "No",
-
-        fall_after_shock:
-            "No",
-
-        water_type:
-            "None",
-
-        water_inhalation:
-            "No",
-
-        cpr_required:
-            "No",
-
-        fall_height:
-            0,
-
-        head_injury:
-            "No",
-
-        animal_type:
-            "None",
-
-        bite_location:
-            "None",
-
-        venomous:
-            "No",
-
-        weapon_involved:
-            "No",
-
-        injury_location:
-            "None",
-
-        visible_injury:
-            "No"
-
+        emergency_type: emergencyType || "Unknown",
+        incident_location: "",
+        bleeding: "No",
+        conscious: "Yes",
+        breathing: "Normal",
+        accident_level: "None",
+        visible_fracture: "No",
+        trapped: "No",
+        injury_type: "Unknown",
+        pain_level: "Unknown",
+        chest_pain: "No",
+        sweating: "No",
+        shortness_of_breath: "No",
+        face_drooping: "No",
+        arm_weakness: "No",
+        speech_difficulty: "No",
+        poison_type: "None",
+        vomiting: "No",
+        seizures: "No",
+        entry_exit_burn: "No",
+        muscle_spasm: "No",
+        fall_after_shock: "No",
+        water_type: "None",
+        water_inhalation: "No",
+        cpr_required: "No",
+        fall_height: 0,
+        head_injury: "No",
+        animal_type: "None",
+        bite_location: "None",
+        venomous: "No",
+        weapon_involved: "No",
+        injury_location: "None",
+        visible_injury: "No"
     };
 
+    // --------------------------------------------------------
+    // SEVERITY WORDS
+    // --------------------------------------------------------
 
-    // ========================================================
-    // SERIOUS / NOT SERIOUS
-    // ========================================================
+    const notSerious = containsAny(text, [
+        "not serious",
+        "nothing serious",
+        "not severe",
+        "nothing severe",
+        "not badly injured",
+        "not badly hurt",
+        "only mild",
+        "just mild",
+        "minor injury",
+        "small injury",
+        "slight injury",
+        "little pain",
+        "mild pain",
+        "minor pain",
+        "slight pain",
+        "only a scratch",
+        "just a scratch",
+        "small scratch",
+        "minor accident",
+        "minor fall"
+    ]);
 
-    const notSerious =
-        containsAny(text, [
+    const serious = containsAny(text, [
+        "very serious",
+        "extremely serious",
+        "severe injury",
+        "severe pain",
+        "critical condition",
+        "heavy bleeding",
+        "heavily bleeding",
+        "unconscious",
+        "cannot breathe",
+        "can't breathe",
+        "not breathing",
+        "major injury",
+        "badly injured",
+        "serious injury",
+        "major accident",
+        "severe accident"
+    ]);
 
-            "not serious",
-            "nothing serious",
-            "not severe",
-            "nothing severe",
-            "not badly injured",
-            "not badly hurt",
-            "only mild",
-            "just mild",
-            "minor injury",
-            "small injury",
-            "slight injury",
-            "little pain",
-            "mild pain",
-            "minor pain",
-            "slight pain",
-            "only a scratch",
-            "just a scratch",
-            "small scratch",
-            "minor accident",
-            "minor fall"
-
-        ]);
-
-
-    const serious =
-        containsAny(text, [
-
-            "very serious",
-            "extremely serious",
-            "severe injury",
-            "severe pain",
-            "critical condition",
-            "heavy bleeding",
-            "heavily bleeding",
-            "unconscious",
-            "cannot breathe",
-            "can't breathe",
-            "not breathing",
-            "major injury",
-            "badly injured",
-            "serious injury",
-            "major accident",
-            "severe accident"
-
-        ]);
-
-
-    console.log(
-        "Not Serious:",
-        notSerious
-    );
-
-    console.log(
-        "Serious:",
-        serious
-    );
-
-
-    // ========================================================
-    // FALL
-    // ========================================================
+    // --------------------------------------------------------
+    // FALL AND FALL HEIGHT
+    // --------------------------------------------------------
 
     const fallDetected =
         type.includes("fall") ||
         containsAny(text, [
-
             "fall",
             "fell",
             "fallen",
@@ -327,82 +294,25 @@ function extractMLFeatures(
             "slipped down",
             "fell from stairs",
             "fell off"
-
         ]);
 
-
     if (fallDetected) {
+        features.injury_type = "Fall";
 
-        features.injury_type =
-            "Fall";
-
-
-        console.log(
-            "Detected: FALL"
+        const heightMatch = text.match(
+            /(\d+(?:\.\d+)?)\s*(feet|foot|ft|meter|meters|m)\b/
         );
 
-
-        // FALL HEIGHT
-
-        const heightMatch =
-            text.match(
-                /(\d+(?:\.\d+)?)\s*(feet|foot|ft|meter|meters|m)\b/
-            );
-
-
         if (heightMatch) {
+            let height = Number(heightMatch[1]);
+            const unit = heightMatch[2];
 
-            let height =
-                parseFloat(
-                    heightMatch[1]
-                );
-
-            const unit =
-                heightMatch[2];
-
-
-            if (
-                unit === "meter" ||
-                unit === "meters" ||
-                unit === "m"
-            ) {
-
-                height =
-                    height * 3.28084;
-
+            if (["meter", "meters", "m"].includes(unit)) {
+                height *= 3.28084;
             }
 
-
-            features.fall_height =
-                Math.round(height);
-
-
-            console.log(
-                "Fall Height:",
-                features.fall_height
-            );
-
+            features.fall_height = Math.round(height);
         }
-
-
-        // FALL AFTER ELECTRIC SHOCK
-
-        if (
-            containsAny(text, [
-                "fall after shock",
-                "fell after electric shock",
-                "fall after electricity",
-                "collapsed after shock"
-            ])
-        ) {
-
-            features.fall_after_shock =
-                "Yes";
-
-        }
-
-
-        // ACCIDENT SEVERITY
 
         if (
             serious ||
@@ -412,120 +322,83 @@ function extractMLFeatures(
             text.includes("broken bone") ||
             text.includes("unconscious")
         ) {
-
-            features.accident_level =
-                "Severe";
-
+            features.accident_level = "Severe";
+        } else if (notSerious) {
+            features.accident_level = "Minor";
+        } else {
+            features.accident_level = "Moderate";
         }
-        else if (notSerious) {
-
-            features.accident_level =
-                "Minor";
-
-        }
-        else {
-
-            features.accident_level =
-                "Moderate";
-
-        }
-
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // BLEEDING
-    // ========================================================
+    // --------------------------------------------------------
 
     const bleedingWords = [
-
         "bleeding",
         "bleed",
-        "blood",
-        "bleeds",
-        "blood loss"
-
+        "blood loss",
+        "blood is coming"
     ];
 
-
     if (
-        containsAny(
-            text,
-            bleedingWords
-        ) &&
-        !isNegated(
-            text,
-            bleedingWords
-        )
+        containsAny(text, bleedingWords) &&
+        !containsAny(text, [
+            "no bleeding",
+            "not bleeding",
+            "without bleeding",
+            "no blood loss"
+        ]) &&
+        !isNegated(text, bleedingWords)
     ) {
-
-        features.bleeding =
-            "Yes";
-
-        console.log(
-            "Detected: BLEEDING"
-        );
-
+        features.bleeding = "Yes";
     }
-    else {
-
-        features.bleeding =
-            "No";
-
-    }
-
-
-    // ========================================================
-    // CONSCIOUSNESS
-    // ========================================================
 
     if (
         containsAny(text, [
+            "no bleeding",
+            "not bleeding",
+            "without bleeding",
+            "no blood loss"
+        ])
+    ) {
+        features.bleeding = "No";
+    }
 
+    // --------------------------------------------------------
+    // CONSCIOUSNESS
+    // --------------------------------------------------------
+
+    if (
+        containsAny(text, [
             "unconscious",
             "passed out",
             "lost consciousness",
             "not conscious",
             "not responding",
             "unresponsive"
-
         ])
     ) {
-
-        features.conscious =
-            "No";
-
-        console.log(
-            "Detected: UNCONSCIOUS"
-        );
-
-    }
-    else if (
+        features.conscious = "No";
+    } else if (
         containsAny(text, [
-
-            "conscious",
             "fully conscious",
-            "awake",
+            "conscious and alert",
             "awake and alert",
-            "alert",
-            "responsive"
-
+            "patient is awake",
+            "patient is conscious",
+            "responsive and alert"
         ])
     ) {
-
-        features.conscious =
-            "Yes";
-
+        features.conscious = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // BREATHING
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
             "difficulty breathing",
             "difficulty in breathing",
             "shortness of breath",
@@ -534,249 +407,157 @@ function extractMLFeatures(
             "can't breathe",
             "not breathing",
             "breathing problem",
-            "breathing difficulty"
-
+            "breathing difficulty",
+            "struggling to breathe"
         ])
     ) {
-
-        features.breathing =
-            "Difficulty";
-
-        features.shortness_of_breath =
-            "Yes";
-
-        console.log(
-            "Detected: BREATHING DIFFICULTY"
-        );
-
-    }
-    else if (
+        features.breathing = "Difficulty";
+        features.shortness_of_breath = "Yes";
+    } else if (
         containsAny(text, [
-
             "breathing normally",
             "breathing normal",
             "breathing fine",
             "can breathe normally",
             "normal breathing",
             "no breathing problem"
-
         ])
     ) {
-
-        features.breathing =
-            "Normal";
-
-        features.shortness_of_breath =
-            "No";
-
+        features.breathing = "Normal";
+        features.shortness_of_breath = "No";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // PAIN LEVEL
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
             "severe pain",
             "extreme pain",
             "unbearable pain",
             "very painful",
             "excruciating pain"
-
         ])
     ) {
-
-        features.pain_level =
-            "Severe";
-
-    }
-    else if (
+        features.pain_level = "Severe";
+    } else if (
         containsAny(text, [
-
             "moderate pain",
             "medium pain",
             "considerable pain"
-
         ])
     ) {
-
-        features.pain_level =
-            "Moderate";
-
-    }
-    else if (
+        features.pain_level = "Moderate";
+    } else if (
         containsAny(text, [
-
             "mild pain",
             "little pain",
             "small pain",
             "slight pain",
             "minor pain"
-
         ])
     ) {
-
-        features.pain_level =
-            "Mild";
-
-    }
-    else if (
+        features.pain_level = "Mild";
+    } else if (
         containsAny(text, [
-
             "no pain",
             "without pain",
             "doesn't hurt",
             "does not hurt"
-
         ])
     ) {
-
-        features.pain_level =
-            "None";
-
+        features.pain_level = "None";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // CHEST PAIN
-    // ========================================================
+    // --------------------------------------------------------
 
     const chestPainWords = [
-
         "chest pain",
         "pain in chest",
         "chest hurts",
         "chest pressure",
         "chest tightness",
         "chest discomfort"
-
     ];
 
-
     if (
-        containsAny(
-            text,
-            chestPainWords
-        ) &&
-        !isNegated(
-            text,
-            chestPainWords
-        )
+        containsAny(text, chestPainWords) &&
+        !containsAny(text, [
+            "no chest pain",
+            "without chest pain",
+            "no pain in chest"
+        ]) &&
+        !isNegated(text, chestPainWords)
     ) {
-
-        features.chest_pain =
-            "Yes";
-
+        features.chest_pain = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // SWEATING
-    // ========================================================
+    // --------------------------------------------------------
 
     const sweatingWords = [
-
         "sweating",
         "sweaty",
         "cold sweat",
         "excessive sweating"
-
     ];
 
-
     if (
-        containsAny(
-            text,
-            sweatingWords
-        ) &&
-        !isNegated(
-            text,
-            sweatingWords
-        )
+        containsAny(text, sweatingWords) &&
+        !containsAny(text, [
+            "no sweating",
+            "not sweating",
+            "without sweating"
+        ]) &&
+        !isNegated(text, sweatingWords)
     ) {
-
-        features.sweating =
-            "Yes";
-
+        features.sweating = "Yes";
     }
 
-
-    // ========================================================
-    // SHORTNESS OF BREATH
-    // ========================================================
+    // --------------------------------------------------------
+    // STROKE SYMPTOMS
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
-            "shortness of breath",
-            "difficulty breathing",
-            "breathing difficulty",
-            "breathless",
-            "cannot breathe",
-            "can't breathe"
-
-        ])
-    ) {
-
-        features.shortness_of_breath =
-            "Yes";
-
-    }
-
-
-    // ========================================================
-    // STROKE - FACE
-    // ========================================================
-
-    if (
-        containsAny(text, [
-
             "face drooping",
             "drooping face",
             "face is drooping",
             "facial droop"
-
+        ]) &&
+        !containsAny(text, [
+            "no face drooping",
+            "no facial droop",
+            "face is not drooping"
         ])
     ) {
-
-        features.face_drooping =
-            "Yes";
-
+        features.face_drooping = "Yes";
     }
-
-
-    // ========================================================
-    // STROKE - ARM
-    // ========================================================
 
     if (
         containsAny(text, [
-
             "arm weakness",
             "weak arm",
             "arm is weak",
             "weakness in arm",
             "cannot move arm",
             "can't move arm"
-
+        ]) &&
+        !containsAny(text, [
+            "no arm weakness",
+            "no weakness in arm",
+            "arms are not weak"
         ])
     ) {
-
-        features.arm_weakness =
-            "Yes";
-
+        features.arm_weakness = "Yes";
     }
-
-
-    // ========================================================
-    // STROKE - SPEECH
-    // ========================================================
 
     if (
         containsAny(text, [
-
             "speech difficulty",
             "difficulty speaking",
             "cannot speak",
@@ -784,76 +565,68 @@ function extractMLFeatures(
             "slurred speech",
             "speech problem",
             "unable to speak"
-
+        ]) &&
+        !containsAny(text, [
+            "no speech difficulty",
+            "speaking normally",
+            "speech is normal"
         ])
     ) {
-
-        features.speech_difficulty =
-            "Yes";
-
+        features.speech_difficulty = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // VOMITING
-    // ========================================================
+    // --------------------------------------------------------
 
     const vomitingWords = [
-
         "vomiting",
         "vomit",
         "throwing up"
-
     ];
 
-
     if (
-        containsAny(
-            text,
-            vomitingWords
-        ) &&
-        !isNegated(
-            text,
-            vomitingWords
-        )
+        containsAny(text, vomitingWords) &&
+        !containsAny(text, [
+            "no vomiting",
+            "not vomiting",
+            "no vomit",
+            "has not vomited"
+        ]) &&
+        !isNegated(text, vomitingWords)
     ) {
-
-        features.vomiting =
-            "Yes";
-
+        features.vomiting = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // SEIZURES
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
             "seizure",
             "seizures",
             "convulsion",
             "convulsions",
             "fits",
             "having a fit"
-
+        ]) &&
+        !containsAny(text, [
+            "no seizure",
+            "no seizures",
+            "no convulsions",
+            "not having a seizure"
         ])
     ) {
-
-        features.seizures =
-            "Yes";
-
+        features.seizures = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // HEAD INJURY
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
             "head injury",
             "hit my head",
             "hit his head",
@@ -862,302 +635,273 @@ function extractMLFeatures(
             "head bleeding",
             "injured my head",
             "head trauma"
-
+        ]) &&
+        !containsAny(text, [
+            "no head injury",
+            "did not hit my head",
+            "did not hit his head",
+            "did not hit her head"
         ])
     ) {
-
-        features.head_injury =
-            "Yes";
-
-        features.injury_location =
-            "Head";
-
-        features.visible_injury =
-            "Yes";
-
+        features.head_injury = "Yes";
+        features.injury_location = "Head";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // FRACTURE
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
             "fracture",
             "broken bone",
             "bone is broken",
             "broken arm",
             "broken leg"
-
+        ]) &&
+        !containsAny(text, [
+            "no fracture",
+            "no broken bone",
+            "no broken bones"
         ])
     ) {
-
-        features.visible_fracture =
-            "Yes";
-
-        features.visible_injury =
-            "Yes";
-
+        features.visible_fracture = "Yes";
+        features.visible_injury = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // TRAPPED
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
             "trapped",
             "stuck",
             "cannot get out",
             "can't get out",
             "trapped inside"
-
+        ]) &&
+        !containsAny(text, [
+            "not trapped",
+            "not stuck",
+            "isn't trapped"
         ])
     ) {
-
-        features.trapped =
-            "Yes";
-
+        features.trapped = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // CPR
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
-            "cpr",
+            "cpr required",
+            "perform cpr",
+            "doing cpr",
             "cardiac arrest",
-            "heart stopped",
-            "not breathing"
-
+            "heart stopped"
         ])
     ) {
-
-        features.cpr_required =
-            "Yes";
-
+        features.cpr_required = "Yes";
     }
 
-
-    // ========================================================
-    // WEAPON
-    // ========================================================
+    // --------------------------------------------------------
+    // WEAPON / ASSAULT
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
-
-            "gun",
             "gunshot",
-            "knife",
-            "weapon",
+            "knife wound",
+            "weapon involved",
             "stabbed",
             "stabbing",
             "shooting",
-            "shot",
-            "bullet"
-
+            "bullet wound"
         ])
     ) {
-
-        features.weapon_involved =
-            "Yes";
-
-        features.visible_injury =
-            "Yes";
-
+        features.weapon_involved = "Yes";
+        features.visible_injury = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // ELECTRIC SHOCK
-    // ========================================================
+    // --------------------------------------------------------
 
-    if (
+    const electricShockDetected =
+        type.includes("electric") ||
         containsAny(text, [
-
             "electric shock",
             "electrical shock",
-            "electricity",
             "electrocuted",
             "electric current",
             "electrocution"
+        ]);
 
-        ])
-    ) {
+    if (electricShockDetected) {
+        features.injury_type = "Electric Shock";
 
-        features.fall_after_shock =
-            "Yes";
+        // Do not automatically mark a fall after shock.
+        // That requires an explicit description.
+        if (
+            containsAny(text, [
+                "fell after shock",
+                "fall after shock",
+                "collapsed after shock",
+                "fell after electric shock"
+            ])
+        ) {
+            features.fall_after_shock = "Yes";
+        }
 
-        features.injury_type =
-            "Electric Shock";
-
+        if (
+            containsAny(text, [
+                "muscle spasm",
+                "muscle spasms",
+                "muscle cramp",
+                "muscle cramps"
+            ])
+        ) {
+            features.muscle_spasm = "Yes";
+        }
     }
 
+    // --------------------------------------------------------
+    // BURNS
+    // --------------------------------------------------------
 
-    // ========================================================
-    // BURN
-    // ========================================================
-
-    if (
+    const burnDetected =
         type.includes("burn") ||
         containsAny(text, [
-
             "burn injury",
             "burn",
             "burned",
             "burnt",
             "severe burn",
             "electric burn"
+        ]);
 
-        ])
-    ) {
+    if (burnDetected) {
+        features.injury_type = "Burn";
 
-        features.entry_exit_burn =
-            "Yes";
-
-        features.injury_type =
-            "Burn";
-
+        // Generic burns do not establish entry/exit burn marks.
+        if (
+            containsAny(text, [
+                "entry and exit burn",
+                "entry-exit burn",
+                "entry burn and exit burn",
+                "entry wound and exit wound"
+            ])
+        ) {
+            features.entry_exit_burn = "Yes";
+        }
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // POISONING
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         type.includes("poison") ||
         containsAny(text, [
-
-            "poison",
             "poisoning",
             "poisoned",
-            "toxic",
+            "toxic substance",
             "toxin"
-
         ])
     ) {
-
-        features.poison_type =
-            "Poison";
-
-        features.injury_type =
-            "Poisoning";
-
+        features.poison_type = "Poison";
+        features.injury_type = "Poisoning";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // DROWNING / WATER
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         type.includes("drown") ||
         containsAny(text, [
-
             "drowning",
             "drowned",
             "fell into water",
             "water accident",
             "near drowning"
-
         ])
     ) {
+        features.water_type = "Water";
+        features.injury_type = "Drowning";
 
-        features.water_type =
-            "Water";
-
-        features.water_inhalation =
-            "Yes";
-
-        features.injury_type =
-            "Drowning";
-
+        // Water inhalation is marked only when described.
+        if (
+            containsAny(text, [
+                "water inhalation",
+                "inhaled water",
+                "water in lungs",
+                "breathed water"
+            ])
+        ) {
+            features.water_inhalation = "Yes";
+        }
     }
-
 
     if (
         containsAny(text, [
-
             "water inhalation",
             "inhaled water",
             "water in lungs",
             "breathed water"
-
         ])
     ) {
-
-        features.water_inhalation =
-            "Yes";
-
+        features.water_inhalation = "Yes";
     }
 
-
-    // ========================================================
-    // DOG BITE
-    // ========================================================
+    // --------------------------------------------------------
+    // ANIMAL BITES
+    // --------------------------------------------------------
 
     if (
-        text.includes("dog bite") ||
-        text.includes("dog bit")
+        containsAny(text, [
+            "dog bite",
+            "dog bit",
+            "bitten by dog"
+        ])
     ) {
-
-        features.animal_type =
-            "Dog";
-
-        features.venomous =
-            "No";
-
-        features.bite_location =
-            "Unknown";
-
-        features.visible_injury =
-            "Yes";
-
-        features.injury_type =
-            "Animal Bite";
-
+        features.animal_type = "Dog";
+        features.venomous = "No";
+        features.injury_type = "Animal Bite";
+        features.visible_injury = "Yes";
     }
-
-
-    // ========================================================
-    // SNAKE BITE
-    // ========================================================
 
     if (
-        text.includes("snake bite") ||
-        text.includes("snakebite") ||
-        text.includes("snake bit")
+        containsAny(text, [
+            "snake bite",
+            "snakebite",
+            "snake bit",
+            "bitten by snake"
+        ])
     ) {
+        features.animal_type = "Snake";
+        features.injury_type = "Animal Bite";
+        features.visible_injury = "Yes";
 
-        features.animal_type =
-            "Snake";
-
-        features.venomous =
-            "Yes";
-
-        features.bite_location =
-            "Unknown";
-
-        features.visible_injury =
-            "Yes";
-
-        features.injury_type =
-            "Animal Bite";
-
+        // Do not infer venom status from the animal alone.
+        if (
+            containsAny(text, [
+                "venomous",
+                "venom",
+                "poisonous snake",
+                "cobra",
+                "viper"
+            ])
+        ) {
+            features.venomous = "Yes";
+        }
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // BITE LOCATION
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
@@ -1166,220 +910,116 @@ function extractMLFeatures(
             "bite on finger"
         ])
     ) {
-
-        features.bite_location =
-            "Hand";
-
-    }
-    else if (
+        features.bite_location = "Hand";
+    } else if (
         containsAny(text, [
             "bite on arm",
             "bitten on arm"
         ])
     ) {
-
-        features.bite_location =
-            "Arm";
-
-    }
-    else if (
+        features.bite_location = "Arm";
+    } else if (
         containsAny(text, [
             "bite on leg",
             "bitten on leg"
         ])
     ) {
-
-        features.bite_location =
-            "Leg";
-
-    }
-    else if (
+        features.bite_location = "Leg";
+    } else if (
         containsAny(text, [
             "bite on foot",
             "bitten on foot"
         ])
     ) {
-
-        features.bite_location =
-            "Foot";
-
-    }
-    else if (
+        features.bite_location = "Foot";
+    } else if (
         containsAny(text, [
             "bite on face",
             "bitten on face"
         ])
     ) {
-
-        features.bite_location =
-            "Face";
-
+        features.bite_location = "Face";
     }
 
-
-    // ========================================================
-    // VENOMOUS
-    // ========================================================
-
-    if (
-        containsAny(text, [
-
-            "venomous",
-            "venom",
-            "poisonous snake",
-            "cobra",
-            "viper"
-
-        ])
-    ) {
-
-        features.venomous =
-            "Yes";
-
-    }
-
-
-    // ========================================================
-    // MUSCLE SPASM
-    // ========================================================
-
-    if (
-        containsAny(text, [
-
-            "muscle spasm",
-            "muscle spasms",
-            "muscle cramp",
-            "muscle cramps",
-            "cramps"
-
-        ])
-    ) {
-
-        features.muscle_spasm =
-            "Yes";
-
-    }
-
-
-    // ========================================================
+    // --------------------------------------------------------
     // INJURY LOCATION
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         text.includes("head") ||
         text.includes("forehead")
     ) {
-
-        features.injury_location =
-            "Head";
-
-    }
-    else if (
-        text.includes("chest")
-    ) {
-
-        features.injury_location =
-            "Chest";
-
-    }
-    else if (
+        features.injury_location = "Head";
+    } else if (text.includes("chest")) {
+        features.injury_location = "Chest";
+    } else if (
         text.includes("arm") ||
         text.includes("hand")
     ) {
-
-        features.injury_location =
-            "Arm";
-
-    }
-    else if (
+        features.injury_location = "Arm";
+    } else if (
         text.includes("leg") ||
         text.includes("knee") ||
         text.includes("foot")
     ) {
-
-        features.injury_location =
-            "Leg";
-
+        features.injury_location = "Leg";
     }
 
+    // --------------------------------------------------------
+    // VISIBLE INJURY
+    // --------------------------------------------------------
 
-    // ========================================================
-    // GENERAL VISIBLE INJURY
-    //
-    // IMPORTANT:
-    // "I had a minor fall" DOES NOT automatically mean
-    // visible injury.
-    // ========================================================
+    const explicitVisibleInjury = containsAny(text, [
+        "visible injury",
+        "visible wound",
+        "open wound",
+        "deep wound",
+        "large wound",
+        "severe wound",
+        "open cut",
+        "deep cut",
+        "large cut",
+        "blood coming from wound"
+    ]);
 
-    const explicitVisibleInjury =
-        containsAny(text, [
-
-            "visible injury",
-            "visible wound",
-            "open wound",
-            "deep wound",
-            "large wound",
-            "severe wound",
-            "open cut",
-            "deep cut",
-            "large cut",
-            "blood coming from wound"
-
-        ]);
-
-
-    const explicitNoVisibleInjury =
-        containsAny(text, [
-
-            "no visible injury",
-            "no visible injuries",
-            "no visible wound",
-            "no wound",
-            "no wounds",
-            "no injury",
-            "no injuries",
-            "without injury",
-            "without injuries",
-            "without wound",
-            "without wounds"
-
-        ]);
-
+    const explicitNoVisibleInjury = containsAny(text, [
+        "no visible injury",
+        "no visible injuries",
+        "no visible wound",
+        "no wound",
+        "no wounds",
+        "no injury",
+        "no injuries",
+        "without injury",
+        "without injuries",
+        "without wound",
+        "without wounds"
+    ]);
 
     if (explicitNoVisibleInjury) {
-
-        features.visible_injury =
-            "No";
-
-    }
-    else if (explicitVisibleInjury) {
-
-        features.visible_injury =
-            "Yes";
-
+        features.visible_injury = "No";
+    } else if (explicitVisibleInjury) {
+        features.visible_injury = "Yes";
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // ACCIDENT TYPE
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         type.includes("accident") &&
         features.accident_level === "None"
     ) {
-
-        features.accident_level =
-            notSerious
-                ? "Minor"
+        features.accident_level = notSerious
+            ? "Minor"
+            : serious
+                ? "Severe"
                 : "Moderate";
-
     }
 
-
-    // ========================================================
+    // --------------------------------------------------------
     // FINAL NEGATION OVERRIDES
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
         containsAny(text, [
@@ -1388,12 +1028,8 @@ function extractMLFeatures(
             "not bleeding"
         ])
     ) {
-
-        features.bleeding =
-            "No";
-
+        features.bleeding = "No";
     }
-
 
     if (
         containsAny(text, [
@@ -1408,12 +1044,8 @@ function extractMLFeatures(
             "without injuries"
         ])
     ) {
-
-        features.visible_injury =
-            "No";
-
+        features.visible_injury = "No";
     }
-
 
     if (
         containsAny(text, [
@@ -1424,37 +1056,14 @@ function extractMLFeatures(
             "no breathing problem"
         ])
     ) {
-
-        features.breathing =
-            "Normal";
-
-        features.shortness_of_breath =
-            "No";
-
+        features.breathing = "Normal";
+        features.shortness_of_breath = "No";
     }
 
-
-    // ========================================================
-    // FINAL OUTPUT
-    // ========================================================
-
-    console.log(
-        "========================================"
-    );
-
-    console.log(
-        "SMARTEMS 34 ML FEATURES"
-    );
-
+    console.log("SMARTEMS ML FEATURES");
     console.table(features);
 
-    console.log(
-        "========================================"
-    );
-
-
     return features;
-
 }
 
 
