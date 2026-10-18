@@ -1,45 +1,34 @@
-
 console.log("SmartEMS initialized");
-
 
 // ============================================================
 // SMARTEMS CONFIGURATION
 // ============================================================
 
-const API_BASE =
-    "https://meddispatch-backend.onrender.com";
+const API_BASE = "https://meddispatch-backend.onrender.com";
 
 const JSON_HEADERS = {
     "Content-Type": "application/json"
 };
-
 
 // ============================================================
 // TEXT HELPERS
 // ============================================================
 
 function normalizeText(text) {
-
     return String(text || "")
         .toLowerCase()
         .replace(/[.,!?;:()[\]{}]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
-
 }
 
-
 function containsAny(text, phrases) {
-
     return phrases.some(function (phrase) {
         return text.includes(phrase);
     });
-
 }
 
-
 function isNegated(text, words) {
-
     const negations = [
         "no",
         "not",
@@ -55,53 +44,36 @@ function isNegated(text, words) {
         "can't"
     ];
 
-
     for (const word of words) {
-
         let startIndex = 0;
 
         while (true) {
-
-            const index =
-                text.indexOf(word, startIndex);
+            const index = text.indexOf(word, startIndex);
 
             if (index === -1) {
                 break;
             }
 
-            const before =
-                text.substring(
-                    Math.max(0, index - 40),
-                    index
-                );
-
+            const before = text.substring(
+                Math.max(0, index - 40),
+                index
+            );
 
             for (const negation of negations) {
-
                 if (before.includes(negation)) {
                     return true;
                 }
-
             }
 
-            startIndex =
-                index + word.length;
-
+            startIndex = index + word.length;
         }
-
     }
 
     return false;
-
 }
 
-
 // ============================================================
-// 34 ML FEATURE EXTRACTION
-// ============================================================
-
-// ============================================================
-// 34 ML FEATURE EXTRACTION
+// ML FEATURE EXTRACTION
 // ============================================================
 
 function extractMLFeatures(emergencyType, symptoms, age) {
@@ -115,7 +87,6 @@ function extractMLFeatures(emergencyType, symptoms, age) {
     console.log("User Sentence:", symptoms);
     console.log("Normalized:", text);
 
-    // Defaults retained for compatibility with your existing API.
     const features = {
         age: Number(age) || 0,
         emergency_type: emergencyType || "Unknown",
@@ -249,7 +220,6 @@ function extractMLFeatures(emergencyType, symptoms, age) {
             features.accident_level = "Severe";
         } else if (notSerious) {
             features.accident_level = "Minor";
-
         } else {
             features.accident_level = "Moderate";
         }
@@ -394,8 +364,7 @@ function extractMLFeatures(emergencyType, symptoms, age) {
     ) {
         features.pain_level = "None";
     }
-
-    // --------------------------------------------------------
+        // --------------------------------------------------------
     // CHEST PAIN
     // --------------------------------------------------------
 
@@ -434,13 +403,18 @@ function extractMLFeatures(emergencyType, symptoms, age) {
 
     if (
         containsAny(text, sweatingWords) &&
+        !containsAny(text, [
+            "no sweating",
+            "not sweating",
+            "without sweating"
+        ]) &&
         !isNegated(text, sweatingWords)
     ) {
         features.sweating = "Yes";
     }
 
     // --------------------------------------------------------
-    // STROKE SYMPTOMS
+    // STROKE SYMPTOMS — FACE DROOPING
     // --------------------------------------------------------
 
     const faceWords = [
@@ -452,10 +426,19 @@ function extractMLFeatures(emergencyType, symptoms, age) {
 
     if (
         containsAny(text, faceWords) &&
+        !containsAny(text, [
+            "no face drooping",
+            "no facial droop",
+            "face is not drooping"
+        ]) &&
         !isNegated(text, faceWords)
     ) {
         features.face_drooping = "Yes";
     }
+
+    // --------------------------------------------------------
+    // ARM WEAKNESS
+    // --------------------------------------------------------
 
     const armWords = [
         "arm weakness",
@@ -468,10 +451,19 @@ function extractMLFeatures(emergencyType, symptoms, age) {
 
     if (
         containsAny(text, armWords) &&
+        !containsAny(text, [
+            "no arm weakness",
+            "no weakness in arm",
+            "arms are not weak"
+        ]) &&
         !isNegated(text, armWords)
     ) {
         features.arm_weakness = "Yes";
     }
+
+    // --------------------------------------------------------
+    // SPEECH DIFFICULTY
+    // --------------------------------------------------------
 
     const speechWords = [
         "speech difficulty",
@@ -485,6 +477,11 @@ function extractMLFeatures(emergencyType, symptoms, age) {
 
     if (
         containsAny(text, speechWords) &&
+        !containsAny(text, [
+            "no speech difficulty",
+            "speaking normally",
+            "speech is normal"
+        ]) &&
         !isNegated(text, speechWords)
     ) {
         features.speech_difficulty = "Yes";
@@ -504,6 +501,12 @@ function extractMLFeatures(emergencyType, symptoms, age) {
 
     if (
         containsAny(text, vomitingWords) &&
+        !containsAny(text, [
+            "no vomiting",
+            "not vomiting",
+            "no vomit",
+            "has not vomited"
+        ]) &&
         !isNegated(text, vomitingWords)
     ) {
         features.vomiting = "Yes";
@@ -524,6 +527,12 @@ function extractMLFeatures(emergencyType, symptoms, age) {
 
     if (
         containsAny(text, seizureWords) &&
+        !containsAny(text, [
+            "no seizure",
+            "no seizures",
+            "no convulsions",
+            "not having a seizure"
+        ]) &&
         !isNegated(text, seizureWords)
     ) {
         features.seizures = "Yes";
@@ -545,6 +554,7 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         ])
     ) {
         features.poison_type = "Unknown";
+        features.injury_type = "Poisoning";
 
         if (
             containsAny(text, [
@@ -589,14 +599,29 @@ function extractMLFeatures(emergencyType, symptoms, age) {
             ])
         ) {
             features.entry_exit_burn = "Electric";
+            features.injury_type = "Electric Shock";
         } else {
+            features.entry_exit_burn = "Yes";
+            features.injury_type = "Burn";
+        }
+
+        if (
+            containsAny(text, [
+                "entry and exit burn",
+                "entry-exit burn",
+                "entry burn and exit burn",
+                "entry wound and exit wound"
+            ])
+        ) {
             features.entry_exit_burn = "Yes";
         }
 
         if (
             containsAny(text, [
                 "muscle spasm",
+                "muscle spasms",
                 "muscle cramps",
+                "muscle cramp",
                 "muscle contraction"
             ])
         ) {
@@ -607,137 +632,12 @@ function extractMLFeatures(emergencyType, symptoms, age) {
             containsAny(text, [
                 "fell after shock",
                 "fell after electric shock",
+                "fall after shock",
                 "collapsed after shock"
             ])
         ) {
             features.fall_after_shock = "Yes";
         }
-    }
-
-    // --------------------------------------------------------
-    // SWEATING
-    // --------------------------------------------------------
-
-    const sweatingWords = [
-        "sweating",
-        "sweaty",
-        "cold sweat",
-        "excessive sweating"
-    ];
-
-    if (
-        containsAny(text, sweatingWords) &&
-        !containsAny(text, [
-            "no sweating",
-            "not sweating",
-            "without sweating"
-        ]) &&
-        !isNegated(text, sweatingWords)
-    ) {
-        features.sweating = "Yes";
-    }
-
-    // --------------------------------------------------------
-    // STROKE SYMPTOMS
-    // --------------------------------------------------------
-
-    if (
-        containsAny(text, [
-            "face drooping",
-            "drooping face",
-            "face is drooping",
-            "facial droop"
-        ]) &&
-        !containsAny(text, [
-            "no face drooping",
-            "no facial droop",
-            "face is not drooping"
-        ])
-    ) {
-        features.face_drooping = "Yes";
-    }
-
-    if (
-        containsAny(text, [
-            "arm weakness",
-            "weak arm",
-            "arm is weak",
-            "weakness in arm",
-            "cannot move arm",
-            "can't move arm"
-        ]) &&
-        !containsAny(text, [
-            "no arm weakness",
-            "no weakness in arm",
-            "arms are not weak"
-        ])
-    ) {
-        features.arm_weakness = "Yes";
-    }
-
-    if (
-        containsAny(text, [
-            "speech difficulty",
-            "difficulty speaking",
-            "cannot speak",
-            "can't speak",
-            "slurred speech",
-            "speech problem",
-            "unable to speak"
-        ]) &&
-        !containsAny(text, [
-            "no speech difficulty",
-            "speaking normally",
-            "speech is normal"
-        ])
-    ) {
-        features.speech_difficulty = "Yes";
-    }
-
-    // --------------------------------------------------------
-    // VOMITING
-    // --------------------------------------------------------
-
-    const vomitingWords = [
-        "vomiting",
-        "vomit",
-        "throwing up"
-    ];
-
-    if (
-        containsAny(text, vomitingWords) &&
-        !containsAny(text, [
-            "no vomiting",
-            "not vomiting",
-            "no vomit",
-            "has not vomited"
-        ]) &&
-        !isNegated(text, vomitingWords)
-    ) {
-        features.vomiting = "Yes";
-    }
-
-    // --------------------------------------------------------
-    // SEIZURES
-    // --------------------------------------------------------
-
-    if (
-        containsAny(text, [
-            "seizure",
-            "seizures",
-            "convulsion",
-            "convulsions",
-            "fits",
-            "having a fit"
-        ]) &&
-        !containsAny(text, [
-            "no seizure",
-            "no seizures",
-            "no convulsions",
-            "not having a seizure"
-        ])
-    ) {
-        features.seizures = "Yes";
     }
 
     // --------------------------------------------------------
@@ -764,6 +664,7 @@ function extractMLFeatures(emergencyType, symptoms, age) {
     ) {
         features.head_injury = "Yes";
         features.injury_location = "Head";
+        features.visible_injury = "Yes";
     }
 
     // --------------------------------------------------------
@@ -810,7 +711,7 @@ function extractMLFeatures(emergencyType, symptoms, age) {
     }
 
     // --------------------------------------------------------
-    // CPR
+    // CPR REQUIRED
     // --------------------------------------------------------
 
     if (
@@ -843,8 +744,7 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         features.weapon_involved = "Yes";
         features.visible_injury = "Yes";
     }
-
-    // --------------------------------------------------------
+        // --------------------------------------------------------
     // ELECTRIC SHOCK
     // --------------------------------------------------------
 
@@ -853,7 +753,6 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         containsAny(text, [
             "electric shock",
             "electrical shock",
-
             "electrocuted",
             "electric current",
             "electrocution"
@@ -862,8 +761,6 @@ function extractMLFeatures(emergencyType, symptoms, age) {
     if (electricShockDetected) {
         features.injury_type = "Electric Shock";
 
-        // Do not automatically mark a fall after shock.
-        // That requires an explicit description.
         if (
             containsAny(text, [
                 "fell after shock",
@@ -905,7 +802,6 @@ function extractMLFeatures(emergencyType, symptoms, age) {
     if (burnDetected) {
         features.injury_type = "Burn";
 
-        // Generic burns do not establish entry/exit burn marks.
         if (
             containsAny(text, [
                 "entry and exit burn",
@@ -952,7 +848,6 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         features.water_type = "Water";
         features.injury_type = "Drowning";
 
-        // Water inhalation is marked only when described.
         if (
             containsAny(text, [
                 "water inhalation",
@@ -977,7 +872,7 @@ function extractMLFeatures(emergencyType, symptoms, age) {
     }
 
     // --------------------------------------------------------
-    // ANIMAL BITES
+    // ANIMAL BITES — DOG
     // --------------------------------------------------------
 
     if (
@@ -993,6 +888,10 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         features.visible_injury = "Yes";
     }
 
+    // --------------------------------------------------------
+    // ANIMAL BITES — SNAKE
+    // --------------------------------------------------------
+
     if (
         containsAny(text, [
             "snake bite",
@@ -1005,7 +904,6 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         features.injury_type = "Animal Bite";
         features.visible_injury = "Yes";
 
-        // Do not infer venom status from the animal alone.
         if (
             containsAny(text, [
                 "venomous",
@@ -1094,7 +992,6 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         "visible wound",
         "open wound",
         "deep wound",
-
         "large wound",
         "severe wound",
         "open cut",
@@ -1146,7 +1043,8 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         containsAny(text, [
             "no bleeding",
             "without bleeding",
-            "not bleeding"
+            "not bleeding",
+            "no blood loss"
         ])
     ) {
         features.bleeding = "No";
@@ -1181,115 +1079,76 @@ function extractMLFeatures(emergencyType, symptoms, age) {
         features.shortness_of_breath = "No";
     }
 
+    // --------------------------------------------------------
+    // RETURN ML FEATURES
+    // --------------------------------------------------------
+
     console.log("SMARTEMS ML FEATURES");
     console.table(features);
 
     return features;
 }
-
-
 // ============================================================
 // LOGIN
 // ============================================================
 
-const loginForm =
-    document.getElementById("loginForm");
-
+const loginForm = document.getElementById("loginForm");
 
 if (loginForm) {
+    loginForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
 
-    loginForm.addEventListener(
-        "submit",
-        async function (event) {
+        const email = document.getElementById("email")?.value.trim();
+        const password = document.getElementById("password")?.value.trim();
 
-            event.preventDefault();
+        if (!email || !password) {
+            alert("Please enter email and password.");
+            return;
+        }
 
+        try {
+            const response = await fetch(`${API_BASE}/api/auth/login`, {
+                method: "POST",
+                headers: JSON_HEADERS,
+                body: JSON.stringify({
+                    email,
+                    password
+                })
+            });
 
-            const email =
-                document.getElementById("email")?.value.trim();
-
-
-            const password =
-                document.getElementById("password")?.value.trim();
-
-
-            if (!email || !password) {
-
-                alert(
-                    "Please enter email and password."
-                );
-
-                return;
-
-            }
-
+            let data;
 
             try {
-
-                const response =
-                    await fetch(
-                        `${API_BASE}/api/auth/login`,
-                        {
-
-                            method: "POST",
-
-                            headers: JSON_HEADERS,
-
-                            body: JSON.stringify({
-                                email,
-                                password
-                            })
-
-                        }
-                    );
-
-
-                const data =
-                    await response.json();
-
-
-                if (!response.ok) {
-
-                    alert(
-                        data.message ||
-                        "Login failed."
-                    );
-
-                    return;
-
-                }
-
-
-                localStorage.setItem(
-                    "meddispatchUser",
-                    JSON.stringify(data.user)
-                );
-
-
-                alert("Login successful!");
-
-
-                window.location.href =
-                    "dashboard.html";
-
-            }
-            catch (error) {
-
-                console.error(
-                    "Login error:",
-                    error
-                );
-
-
-                alert(
-                    "Cannot connect to MedDispatch backend."
-                );
-
+                data = await response.json();
+            } catch {
+                data = {};
             }
 
+            if (!response.ok) {
+                alert(data.message || "Login failed. Please check your credentials.");
+                return;
+            }
+
+            if (!data.user) {
+                console.error("Login response did not contain user data:", data);
+                alert("Login response is incomplete. Please try again.");
+                return;
+            }
+
+            localStorage.setItem(
+                "meddispatchUser",
+                JSON.stringify(data.user)
+            );
+
+            alert("Login successful!");
+
+            window.location.href = "dashboard.html";
+
+        } catch (error) {
+            console.error("Login error:", error);
+            alert("Cannot connect to the MedDispatch backend. Please try again.");
         }
-    );
-
+    });
 }
 
 
@@ -1297,496 +1156,355 @@ if (loginForm) {
 // SIGNUP
 // ============================================================
 
-const signupForm =
-    document.getElementById("signupForm");
-
+const signupForm = document.getElementById("signupForm");
 
 if (signupForm) {
+    signupForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
 
-    signupForm.addEventListener(
-        "submit",
-        async function (event) {
+        const name = document.getElementById("name")?.value.trim();
+        const email = document.getElementById("email")?.value.trim();
+        const phone = document.getElementById("phone")?.value.trim();
+        const password = document.getElementById("password")?.value.trim();
+        const confirmPassword =
+            document.getElementById("confirmPassword")?.value.trim();
 
-            event.preventDefault();
+        if (
+            !name ||
+            !email ||
+            !phone ||
+            !password ||
+            !confirmPassword
+        ) {
+            alert("Please fill all required fields.");
+            return;
+        }
 
+        if (password !== confirmPassword) {
+            alert("Passwords do not match.");
+            return;
+        }
 
-            const name =
-                document.getElementById("name")?.value.trim();
+        try {
+            const response = await fetch(`${API_BASE}/api/auth/signup`, {
+                method: "POST",
+                headers: JSON_HEADERS,
+                body: JSON.stringify({
+                    name,
+                    email,
+                    phone,
+                    password
+                })
+            });
 
-            const email =
-                document.getElementById("email")?.value.trim();
-
-            const phone =
-
-                document.getElementById("phone")?.value.trim();
-
-
-            const password =
-                document.getElementById("password")?.value.trim();
-
-
-            const confirmPassword =
-                document.getElementById("confirmPassword")?.value.trim();
-
-
-            if (
-                !name ||
-                !email ||
-                !phone ||
-                !password ||
-                !confirmPassword
-            ) {
-
-                alert("Please fill all required fields.");
-
-                return;
-
-            }
-
-
-            if (password !== confirmPassword) {
-
-                alert("Passwords do not match.");
-
-                return;
-
-            }
-
+            let data;
 
             try {
+                data = await response.json();
+            } catch {
+                data = {};
+            }
 
-                const response =
-                    await fetch(
-                        `${API_BASE}/api/auth/signup`,
+            if (!response.ok) {
+                alert(data.message || "Registration failed. Please try again.");
+                return;
+            }
+
+            alert("Account created successfully!");
+
+            window.location.href = "login.html";
+
+        } catch (error) {
+            console.error("Signup error:", error);
+            alert("Cannot connect to the MedDispatch backend. Please try again.");
+        }
+    });
+}
+// ============================================================
+// SOS EMERGENCY ACTIVATION
+// ============================================================
+
+const sosButton = document.getElementById("sosButton");
+
+if (sosButton) {
+    sosButton.addEventListener("click", async function (event) {
+        event.preventDefault();
+
+        const locationStatus = document.getElementById("locationStatus");
+        const sosText = sosButton.querySelector(".sos-text");
+
+        const patientName =
+            document.getElementById("patientName")?.value.trim();
+
+        const patientAge =
+            document.getElementById("patientAge")?.value.trim();
+
+        const patientPhone =
+            document.getElementById("patientPhone")?.value.trim();
+
+        const emergencyType =
+            document.getElementById("emergencyType")?.value.trim();
+
+        const symptoms =
+            document.getElementById("symptoms")?.value.trim() || "";
+
+        // ----------------------------------------------------
+        // VALIDATE REQUIRED FIELDS
+        // ----------------------------------------------------
+
+        if (!patientName || !patientAge || !emergencyType) {
+            alert(
+                "Please enter the patient's name, age, and emergency type."
+            );
+            return;
+        }
+
+        const age = Number(patientAge);
+
+        if (!Number.isInteger(age) || age < 0 || age > 120) {
+            alert("Please enter a valid patient age.");
+            return;
+        }
+
+        // ----------------------------------------------------
+        // EXTRACT ML FEATURES
+        // ----------------------------------------------------
+
+        const features = extractMLFeatures(
+            emergencyType,
+            symptoms,
+            age
+        );
+
+        // ----------------------------------------------------
+        // UPDATE SOS BUTTON
+        // ----------------------------------------------------
+
+        sosButton.disabled = true;
+
+        if (sosText) {
+            sosText.textContent = "ACTIVATING...";
+        } else {
+            sosButton.textContent = "ACTIVATING...";
+        }
+
+        // ----------------------------------------------------
+        // RESTORE BUTTON AFTER FAILURE
+        // ----------------------------------------------------
+
+        function restoreSOSButton() {
+            sosButton.disabled = false;
+
+            if (sosText) {
+                sosText.textContent = "SOS";
+            } else {
+                sosButton.textContent = "SOS";
+            }
+        }
+
+        // ----------------------------------------------------
+        // CHECK GEOLOCATION SUPPORT
+        // ----------------------------------------------------
+
+        if (!navigator.geolocation) {
+            if (locationStatus) {
+                locationStatus.textContent =
+                    "Geolocation is not supported by this browser.";
+            }
+
+            alert(
+                "Your browser does not support location detection. " +
+                "Please use a supported browser."
+            );
+
+            restoreSOSButton();
+            return;
+        }
+
+        if (locationStatus) {
+            locationStatus.textContent =
+                "Detecting your location...";
+        }
+
+        // ----------------------------------------------------
+        // GET PATIENT LOCATION
+        // ----------------------------------------------------
+
+        navigator.geolocation.getCurrentPosition(
+            async function (position) {
+                try {
+                    const latitude = position.coords.latitude;
+                    const longitude = position.coords.longitude;
+
+                    if (locationStatus) {
+                        locationStatus.textContent =
+                            `Location detected: ${latitude.toFixed(5)}, ` +
+                            `${longitude.toFixed(5)}`;
+                    }
+
+                    // ----------------------------------------
+                    // CREATE EMERGENCY PAYLOAD
+                    // ----------------------------------------
+
+                    const emergencyPayload = {
+                        patient_name: patientName,
+                        age: age,
+                        phone: patientPhone,
+                        emergency_type: emergencyType,
+                        incident_location: `${latitude}, ${longitude}`,
+                        ...features
+                    };
+
+                    console.log(
+                        "Submitting emergency:",
+                        emergencyPayload
+                    );
+
+                    // ----------------------------------------
+                    // SEND EMERGENCY TO BACKEND
+                    // ----------------------------------------
+
+                    const emergencyResponse = await fetch(
+                        `${API_BASE}/api/emergencies`,
                         {
                             method: "POST",
                             headers: JSON_HEADERS,
-                            body: JSON.stringify({
-                                name,
-                                email,
-                                phone,
-                                password
-                            })
+                            body: JSON.stringify(emergencyPayload)
                         }
                     );
 
-
-                const data =
-                    await response.json();
-
-
-                if (!response.ok) {
-
-                    alert(
-                        data.message ||
-                        "Registration failed."
-                    );
-
-                    return;
-
-                }
-
-
-                alert("Account created successfully!");
-
-
-                window.location.href = "login.html";
-
-            }
-            catch (error) {
-
-                console.error("Signup error:", error);
-
-
-                alert(
-                    "Cannot connect to MedDispatch backend."
-                );
-
-            }
-
-        }
-    );
-
-}
-
-
-// ============================================================
-// SOS → ML → DISPATCH → TRACKING
-// ============================================================
-
-const sosButton =
-    document.getElementById("sosButton");
-
-
-if (sosButton) {
-
-    sosButton.addEventListener(
-        "click",
-        function () {
-
-            const locationStatus =
-                document.getElementById("locationStatus");
-
-
-            const sosText =
-                sosButton.querySelector(".sos-text");
-
-
-            const patientName =
-                document.getElementById("patientName")?.value.trim();
-
-
-            const patientAge =
-                document.getElementById("patientAge")?.value.trim();
-
-
-            const patientPhone =
-                document.getElementById("patientPhone")?.value.trim();
-
-
-            const emergencyType =
-                document.getElementById("emergencyType")?.value;
-
-
-            const symptoms =
-                document.getElementById("symptoms")?.value.trim();
-
-
-            // =================================================
-            // VALIDATION
-            // =================================================
-
-            if (!patientName) {
-
-                alert("Please enter patient name.");
-
-                return;
-
-            }
-
-
-            if (!patientAge) {
-
-                alert("Please enter patient age.");
-
-                return;
-
-            }
-
-
-            if (!emergencyType) {
-
-                alert("Please select emergency type.");
-
-                return;
-
-            }
-
-
-            // =================================================
-            // EXTRACT 34 ML FEATURES
-            // =================================================
-
-            const features =
-                extractMLFeatures(
-                    emergencyType,
-                    symptoms,
-                    patientAge
-                );
-
-
-            console.log("FINAL FEATURES SENT TO ML:");
-
-            console.table(features);
-
-
-            sosButton.disabled = true;
-
-            if (sosText) {
-
-                sosText.textContent = "ACTIVATING...";
-
-            }
-
-
-            // =================================================
-            // CHECK GEOLOCATION
-            // =================================================
-
-            if (!navigator.geolocation) {
-
-                alert("Location services are not supported.");
-
-                sosButton.disabled = false;
-
-                return;
-
-            }
-
-
-            if (locationStatus) {
-
-                locationStatus.textContent =
-                    "Detecting your location...";
-
-            }
-
-
-            navigator.geolocation.getCurrentPosition(
-
-                async function (position) {
-
-                    const latitude =
-                        position.coords.latitude;
-
-
-                    const longitude =
-                        position.coords.longitude;
-
-
-                    if (locationStatus) {
-
-                        locationStatus.textContent =
-                            "Sending emergency details to AI triage...";
-
-                    }
-
+                    let emergencyData = {};
 
                     try {
+                        emergencyData = await emergencyResponse.json();
+                    } catch {
+                        emergencyData = {};
+                    }
 
-                        // =====================================
-                        // COMPLETE EMERGENCY PAYLOAD
-                        // =====================================
+                    console.log(
+                        "Emergency API response:",
+                        emergencyData
+                    );
 
-                        const emergencyPayload = {
-
-                            patient_name: patientName,
-
-                            age: Number(patientAge),
-
-                            phone: patientPhone || null,
-
-                            emergency_type: emergencyType,
-
-                            incident_location:
-                                `${latitude}, ${longitude}`,
-
-                            bleeding: features.bleeding,
-
-                            conscious: features.conscious,
-
-                            breathing: features.breathing,
-
-                            accident_level: features.accident_level,
-
-                            visible_fracture: features.visible_fracture,
-
-                            trapped: features.trapped,
-
-                            injury_type: features.injury_type,
-
-                            pain_level: features.pain_level,
-
-                            chest_pain: features.chest_pain,
-
-                            sweating: features.sweating,
-
-                            shortness_of_breath:
-                                features.shortness_of_breath,
-
-                            face_drooping: features.face_drooping,
-
-                            arm_weakness: features.arm_weakness,
-
-                            speech_difficulty:
-                                features.speech_difficulty,
-
-                            poison_type: features.poison_type,
-
-                            vomiting: features.vomiting,
-
-                            seizures: features.seizures,
-
-                            entry_exit_burn: features.entry_exit_burn,
-
-                            muscle_spasm: features.muscle_spasm,
-
-                            fall_after_shock: features.fall_after_shock,
-
-                            water_type: features.water_type,
-
-                            water_inhalation: features.water_inhalation,
-
-                            cpr_required: features.cpr_required,
-
-                            fall_height: features.fall_height,
-
-                            head_injury: features.head_injury,
-
-                            animal_type: features.animal_type,
-
-                            bite_location: features.bite_location,
-
-                            venomous: features.venomous,
-
-                            weapon_involved: features.weapon_involved,
-
-                            injury_location: features.injury_location,
-
-                            visible_injury: features.visible_injury
-
-                        };
-
-
-                        console.log("================================");
-
-                        console.log("ML INPUT PAYLOAD");
-
-                        console.log(emergencyPayload);
-
-                        console.log("================================");
-
-
-                        // =====================================
-                        // SEND TO NODE BACKEND
-                        // =====================================
-
-                        const emergencyResponse =
-                            await fetch(
-                                `${API_BASE}/api/emergencies`,
-                                {
-                                    method: "POST",
-                                    headers: JSON_HEADERS,
-                                    body: JSON.stringify(
-                                        emergencyPayload
-                                    )
-                                }
-                            );
-
-
-                        const emergencyData =
-                            await emergencyResponse.json();
-
-
-                        console.log(
-                            "Backend response:",
-                            emergencyData
+                    if (!emergencyResponse.ok) {
+                        throw new Error(
+                            emergencyData.message ||
+                            "Failed to create emergency."
                         );
+                    }
 
+                    // ----------------------------------------
+                    // EMERGENCY SUCCESS
+                    // ----------------------------------------
 
-                        if (!emergencyResponse.ok) {
+                    alert(
+                        "Emergency registered successfully."
+                    );
 
-                            throw new Error(
-                                emergencyData.message ||
-                                "Failed to create emergency"
-                            );
+                    // Save response for the dispatch result page.
+                    sessionStorage.setItem(
+                        "meddispatchEmergency",
+                        JSON.stringify(emergencyData)
+                    );
 
-                        }
+                    sessionStorage.setItem(
+                        "meddispatchEmergencyPayload",
+                        JSON.stringify(emergencyPayload)
+                    );
 
-                },
+                    // ----------------------------------------
+                    // REDIRECT TO DISPATCH RESULT
+                    // ----------------------------------------
 
+                    window.location.href = "dispatch-result.html";
 
-                // =================================================
-                // GEOLOCATION ERROR
-                // =================================================
-
-                function (error) {
-
+                } catch (error) {
                     console.error(
-                        "Location error:",
+                        "SOS emergency submission error:",
                         error
                     );
 
-
-                    alert(
-                        "Unable to detect your location. Please allow location access."
-                    );
-
-
-                    sosButton.disabled = false;
-
-
-                    if (sosText) {
-
-                        sosText.textContent =
-                            "GET EMERGENCY HELP";
-
+                    if (locationStatus) {
+                        locationStatus.textContent =
+                            "Emergency registration failed.";
                     }
 
-                },
+                    alert(
+                        error.message ||
+                        "Unable to register the emergency. Please try again."
+                    );
 
+                    restoreSOSButton();
+                }
+            },
 
-                // =================================================
-                // GEOLOCATION OPTIONS
-                // =================================================
+            function (error) {
+                console.error(
+                    "Geolocation error:",
+                    error
+                );
 
-                {
+                let message =
+                    "Unable to detect your location.";
 
-                    enableHighAccuracy: true,
-
-                    timeout: 10000,
-
-                    maximumAge: 0
-
+                if (error.code === error.PERMISSION_DENIED) {
+                    message =
+                        "Location permission was denied. Please allow " +
+                        "location access in your browser.";
+                } else if (error.code === error.POSITION_UNAVAILABLE) {
+                    message =
+                        "Your current location is unavailable.";
+                } else if (error.code === error.TIMEOUT) {
+                    message =
+                        "Location detection timed out. Please try again.";
                 }
 
-            );
+                if (locationStatus) {
+                    locationStatus.textContent = message;
+                }
 
-        }
-    );
+                alert(
+                    message +
+                    "\n\nThe emergency was not submitted because " +
+                    "this workflow requires location detection."
+                );
 
+                restoreSOSButton();
+            },
+
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            }
+        );
+    });
 }
-
-
 // ============================================================
 // ADMIN LOGIN
 // ============================================================
 
-const adminLoginForm =
-    document.getElementById("adminLoginForm");
-
+const adminLoginForm = document.getElementById("adminLoginForm");
 
 if (adminLoginForm) {
+    adminLoginForm.addEventListener("submit", function (event) {
+        event.preventDefault();
 
-    adminLoginForm.addEventListener(
-        "submit",
-        function (event) {
+        const adminEmail =
+            document.getElementById("adminEmail")?.value.trim();
 
-            event.preventDefault();
+        const adminPassword =
+            document.getElementById("adminPassword")?.value.trim();
 
-
-            const adminEmail =
-                document.getElementById("adminEmail")?.value.trim();
-
-
-            const adminPassword =
-                document.getElementById("adminPassword")?.value.trim();
-
-
-            if (!adminEmail || !adminPassword) {
-
-                alert(
-                    "Please enter admin email and password."
-                );
-
-                return;
-
-            }
-
-
-            window.location.href =
-                "admin-dashboard.html";
-
+        if (!adminEmail || !adminPassword) {
+            alert("Please enter the admin email and password.");
+            return;
         }
-    );
 
+        // This is only a frontend validation check.
+        // Actual admin authentication must be verified by the backend.
+        alert(
+            "Admin login must be verified by the server before access is granted."
+        );
+    });
 }
-
-
-// ============================================================
-// END
-// ============================================================
-
-console.log(
-    "SmartEMS complete script loaded successfully."
-);
